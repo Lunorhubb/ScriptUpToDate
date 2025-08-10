@@ -1,26 +1,110 @@
--- Self-installing autoexec for Grow a Garden
-local TARGET_PLACE_ID = 6884319169 -- Grow a Garden's PlaceId
+-- ===== Universal Grow a Garden AutoExec Installer =====
+local ALLOW_INSTALL = true
 
-if game.PlaceId == TARGET_PLACE_ID then
-    if writefile and isfolder and makefolder and isfile then
-        if not isfolder("autoexec") then
-            makefolder("autoexec")
-        end
-        if not isfile("autoexec/SpeedHubX.lua") then
-            writefile(
-                "autoexec/SpeedHubX.lua",
-                string.format([[
-if game.PlaceId == %d then
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/Lunorhubb/SpeedHubX/refs/heads/main/loader.lua"))()
+local GAME_ID = 7436755782
+local FILE_NAME = "grow_a_garden_loader.lua"
+local SCRIPT_URL = "https://raw.githubusercontent.com/Lunorhubb/SpeedHubX/refs/heads/main/loader.lua" -- Change to any raw Lua link
+
+-- Function to safely download and run Lua from a URL
+local function fetchAndRun(url, tag)
+    local ok, res = pcall(function() 
+        return game:HttpGet(url) 
+    end)
+
+    if not ok or not res or #res == 0 then
+        warn(string.format("[%s] Failed to download or empty file from: %s", tag or "Loader", url))
+        return false
+    end
+
+    local func, err = loadstring(res)
+    if not func then
+        warn(string.format("[%s] Invalid Lua code: %s", tag or "Loader", err))
+        return false
+    end
+
+    local success, runtimeErr = pcall(func)
+    if not success then
+        warn(string.format("[%s] Error running downloaded code: %s", tag or "Loader", runtimeErr))
+        return false
+    end
+
+    return true
 end
-]], TARGET_PLACE_ID)
-            )
-            print("[SpeedHubX] Installed to autoexec for Grow a Garden. It will now run automatically.")
+
+-- Loader code that goes into autoexec
+local loaderCode = string.format([[
+if game.GameId == %d then
+    local function fetchAndRun(url, tag)
+        local ok, res = pcall(function() return game:HttpGet(url) end)
+        if not ok or not res or #res == 0 then
+            warn(string.format("[%s] Failed to download or empty file from: %%s", tag or "Loader"), url)
+            return false
+        end
+        local func, err = loadstring(res)
+        if not func then
+            warn(string.format("[%s] Invalid Lua code: %%s", tag or "Loader"), err)
+            return false
+        end
+        local success, runtimeErr = pcall(func)
+        if not success then
+            warn(string.format("[%s] Error running downloaded code: %%s", tag or "Loader"), runtimeErr)
+            return false
+        end
+        return true
+    end
+    fetchAndRun("%s", "Loader")
+end
+]], GAME_ID, SCRIPT_URL)
+
+-- Known executor paths
+local executorPaths = {
+    Synapse = { "workspace/autoexec", "autoexec" },
+    ["Synapse X"] = { "workspace/autoexec", "autoexec" },
+    Krnl = { "krnl/autoexec", "autoexec" },
+    Delta = { "workspace/autoexec", "autoexec" },
+    Fluxus = { "workspace/autoexec", "autoexec" },
+    ["Script-Ware"] = { "autoexec" },
+    ["Script Ware"] = { "autoexec" }
+}
+
+-- Try to install loader
+local function tryInstall()
+    if not writefile or not isfolder or not makefolder then
+        warn("[Installer] Executor does not support file saving.")
+        return false
+    end
+
+    local execName = identifyexecutor and identifyexecutor() or "Unknown"
+    print("[Installer] Detected executor:", execName)
+
+    -- Pick known paths or fallback to generic "autoexec"
+    local paths = executorPaths[execName] or { "autoexec" }
+
+    for _, path in ipairs(paths) do
+        local ok, err = pcall(function()
+            if not isfolder(path) then makefolder(path) end
+            writefile(path .. "/" .. FILE_NAME, loaderCode)
+        end)
+        if ok then
+            print(string.format("[Installer] Installed loader to: %s/%s", path, FILE_NAME))
+            return true
         end
     end
 
-    -- Run your loader right now
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/Lunorhubb/SpeedHubX/refs/heads/main/loader.lua"))()
+    warn("[Installer] Could not write loader to any known path.")
+    return false
+end
+
+-- Run immediately if in Grow a Garden
+if game.GameId == GAME_ID then
+    fetchAndRun(SCRIPT_URL, "Runtime")
 else
-    warn("[SpeedHubX] This script only works in Grow a Garden.")
+    print("[Installer] Not in Grow a Garden.")
+end
+
+-- Install if allowed
+if ALLOW_INSTALL then
+    tryInstall()
+else
+    print("[Installer] Auto-install skipped. Set ALLOW_INSTALL = true to install.")
 end
